@@ -15,6 +15,8 @@ Install these tools before running the project locally:
 
 You can run `yarn check:setup` after installing dependencies to validate local tools and required environment variables without printing secret values.
 
+For a deeper check that also probes Soroban RPC/Horizon, validates env consistency (network ↔ passphrase ↔ URLs ↔ unlock keys), and verifies seed data, run `yarn diagnose` (see [docs/operations/contributor-diagnostics.md](operations/contributor-diagnostics.md)).
+
 ## Install dependencies
 
 From the repository root:

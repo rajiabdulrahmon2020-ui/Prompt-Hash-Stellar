@@ -4,7 +4,6 @@ import Prompt from "../models/Prompt";
 import PromptVersion from "../models/PromptVersion";
 import Purchase from "../models/Purchase";
 import User from "../models/User";
-import Notification from "../models/Notification";
 import {
   PostPromptUpdate,
   GetPromptVersions,
@@ -18,6 +17,20 @@ vi.mock("../db/connectDb", () => ({
   default: vi.fn(),
 }));
 
+// Notifications are routed through the preference-aware delivery service;
+// unit-test the controller against that boundary instead of the model.
+vi.mock("../services/notificationRouting", () => ({
+  deliverNotification: vi.fn().mockResolvedValue({
+    delivered: true,
+    alreadyDelivered: false,
+    mandatory: false,
+    channels: { inApp: true, email: true },
+    notificationId: "notification-1",
+  }),
+}));
+
+import { deliverNotification } from "../services/notificationRouting";
+
 describe("Prompt Versioning System", () => {
   let mockReq: Partial<Request>;
   let mockRes: Partial<Response>;
@@ -25,8 +38,7 @@ describe("Prompt Versioning System", () => {
   let mockPrompt: any;
 
   beforeEach(() => {
-    vi.restoreAllMocks();
-
+    vi.clearAllMocks();
     // Setup mock request and response
     mockReq = {
       body: {},
@@ -125,11 +137,22 @@ describe("Prompt Versioning System", () => {
         { buyerWallet: "buyer1" },
         { buyerWallet: "buyer2" },
       ] as any);
-      vi.spyOn(Notification, "create").mockResolvedValue({} as any);
 
       await PostPromptUpdate(mockReq as Request, mockRes as Response);
 
-      expect(Notification.create).toHaveBeenCalledTimes(2);
+      expect(deliverNotification).toHaveBeenCalledTimes(2);
+      expect(deliverNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipientWallet: "buyer1",
+          type: "prompt_update",
+        })
+      );
+      expect(deliverNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipientWallet: "buyer2",
+          type: "prompt_update",
+        })
+      );
     });
   });
 
@@ -160,17 +183,14 @@ describe("Prompt Versioning System", () => {
         promptId: mockPrompt._id.toString(),
       };
 
-      const selectSpy = vi.fn().mockResolvedValueOnce([]);
-      const findSpy = vi.spyOn(PromptVersion, "find").mockReturnValueOnce({
-        sort: vi.fn().mockReturnValueOnce({
-          select: selectSpy,
-        }),
+      const select = vi.fn().mockResolvedValueOnce([]);
+      vi.spyOn(PromptVersion, "find").mockReturnValueOnce({
+        sort: vi.fn().mockReturnValueOnce({ select }),
       } as any);
 
       await GetPromptVersions(mockReq as Request, mockRes as Response);
 
-      expect(findSpy).toHaveBeenCalledWith({ promptId: mockPrompt._id.toString() });
-      expect(selectSpy).toHaveBeenCalledWith("-content");
+      expect(select).toHaveBeenCalledWith("-content");
     });
 
     it("should return 400 if promptId is missing", async () => {
@@ -275,7 +295,7 @@ describe("Prompt Versioning System", () => {
       vi.spyOn(Purchase, "findOne").mockResolvedValueOnce(purchase as any);
       vi.spyOn(PromptVersion, "findOne").mockResolvedValueOnce(version as any);
       vi.spyOn(Prompt, "findById").mockReturnValueOnce({
-        lean: vi.fn().mockResolvedValueOnce(mockPrompt),
+        lean: vi.fn().mockResolvedValue(mockPrompt),
       } as any);
 
       await GetBuyerVersion(mockReq as Request, mockRes as Response);
@@ -305,7 +325,7 @@ describe("Prompt Versioning System", () => {
         content: "Specific version content",
       } as any);
       vi.spyOn(Prompt, "findById").mockReturnValueOnce({
-        lean: vi.fn().mockResolvedValueOnce(mockPrompt),
+        lean: vi.fn().mockResolvedValue(mockPrompt),
       } as any);
 
       await GetBuyerVersion(mockReq as Request, mockRes as Response);

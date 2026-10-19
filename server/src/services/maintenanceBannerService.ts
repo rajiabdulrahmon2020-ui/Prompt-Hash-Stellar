@@ -66,7 +66,7 @@ export class MaintenanceBannerError extends Error {
 
 const MAX_TITLE_LENGTH = 200;
 const MAX_MESSAGE_LENGTH = 2000;
-const MAX_FORUT_HOURS = 24 * 365;
+const MAX_WINDOW_HOURS = 24 * 365;
 
 function toDate(value: string | Date, field: string): Date {
   const date = value instanceof Date ? value : new Date(value);
@@ -146,12 +146,12 @@ function assertWindow(startsAt: Date, endsAt: Date): void {
       "endsAt must be after startsAt.",
     );
   }
-  const maxMs = MAX_FORUUT_HOURS * 60 * 60 * 1000;
+  const maxMs = MAX_WINDOW_HOURS * 60 * 60 * 1000;
   if (endsAt.getTime() - startsAt.getTime() > maxMs) {
     throw new MaintenanceBannerError(
       400,
       "invalid_window",
-      `Maintenance window cannot exceed ${MAX_FORUIT_HOURS} hours.`,
+      `Maintenance window cannot exceed ${MAX_WINDOW_HOURS} hours.`,
     );
   }
 }
@@ -199,6 +199,22 @@ export class MaintenanceBannerService {
       startsAt: { $lte: now },
       endsAt: { $gt: now },
       scopes: { $in: [scope, "global"] },
+    })
+      .sort({ severity: -1, startsAt: 1 })
+      .exec();
+    return banners.map(toPublic);
+  }
+
+  /**
+   * Return every banner whose window is open right now, across all scopes,
+   * for the public status page (#986). Same enabled/window rule and index as
+   * `getActiveBanners`, without the scope filter.
+   */
+  async listActive(now: Date = new Date()): Promise<MaintenanceBannerPublic[]> {
+    const banners = await MaintenanceBanner.find({
+      enabled: true,
+      startsAt: { $lte: now },
+      endsAt: { $gt: now },
     })
       .sort({ severity: -1, startsAt: 1 })
       .exec();

@@ -12,6 +12,8 @@ export { decodeEvent } from "./events/decode.js";
 export type { DecodedEvent, UnrecognizedEvent, DecodeResult } from "./events/decode.js";
 export { EVENT_SCHEMAS, CURRENT_EVENT_SCHEMA_VERSION } from "./events/schema.js";
 export type { EventSchema, EventFieldSpec, EventFieldType } from "./events/schema.js";
+export { CONTRACT_MAP, INTEGRATION_BOUNDARIES } from "./events/contractMap.js";
+export type { ContractMapEntry, ContractDomain, IntegrationBoundary } from "./events/contractMap.js";
 export type {
   PurchaseReceipt,
   SignedPurchaseReceipt,

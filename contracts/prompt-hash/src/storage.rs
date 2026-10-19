@@ -366,8 +366,7 @@ impl Storage {
         kind: RevenueShareKind,
         source_id: u64,
     ) -> u32 {
-        let key =
-            DataKey::RevenueRoundingCarry(asset.clone(), recipient.clone(), kind, source_id);
+        let key = DataKey::RevenueRoundingCarry(asset.clone(), recipient.clone(), kind, source_id);
         let remainder = env.storage().persistent().get(&key).unwrap_or(0);
         if env.storage().persistent().has(&key) {
             Self::extend_key_ttl(env, &key);
@@ -383,8 +382,7 @@ impl Storage {
         source_id: u64,
         remainder: u32,
     ) {
-        let key =
-            DataKey::RevenueRoundingCarry(asset.clone(), recipient.clone(), kind, source_id);
+        let key = DataKey::RevenueRoundingCarry(asset.clone(), recipient.clone(), kind, source_id);
         env.storage().persistent().set(&key, &remainder);
         Self::extend_key_ttl(env, &key);
     }

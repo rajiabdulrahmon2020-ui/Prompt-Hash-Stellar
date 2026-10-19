@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema } from "mongoose";
 
 export type CriticalOperationType =
+  | "MAINTAINER_ACTION"
   | "PROMPT_PURCHASE"
   | "PROMPT_PUBLISH"
   | "OWNERSHIP_TRANSFER"
@@ -39,6 +40,7 @@ const signedReceiptSchema = new Schema(
     operationType: {
       type: String,
       enum: [
+        "MAINTAINER_ACTION",
         "PROMPT_PURCHASE",
         "PROMPT_PUBLISH",
         "OWNERSHIP_TRANSFER",

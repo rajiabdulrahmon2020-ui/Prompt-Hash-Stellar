@@ -2905,24 +2905,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@prompthash/schema@file:../packages/schema::locator=prompthash-server%40workspace%3Aserver":
-  version: 0.1.0
-  resolution: "@prompthash/schema@file:../packages/schema#../packages/schema::hash=0a121e&locator=prompthash-server%40workspace%3Aserver"
-  dependencies:
-    zod: "npm:^4.4.3"
-  checksum: 10c0/d08d36ffcdb89fed4e0ac13470c1ca7c2c0297a3d45bfb07d231d98bc854d8a8dac7da0d5968ec3ba1cc81b6e0efd70a8dd4c65f10d81b896b93706d7e6cbf19
-  languageName: node
-  linkType: hard
-
-"@prompthash/schema@file:./packages/schema::locator=prompt-hash-stellar%40workspace%3A.":
-  version: 0.1.0
-  resolution: "@prompthash/schema@file:./packages/schema#./packages/schema::hash=0a121e&locator=prompt-hash-stellar%40workspace%3A."
-  dependencies:
-    zod: "npm:^4.4.3"
-  checksum: 10c0/d08d36ffcdb89fed4e0ac13470c1ca7c2c0297a3d45bfb07d231d98bc854d8a8dac7da0d5968ec3ba1cc81b6e0efd70a8dd4c65f10d81b896b93706d7e6cbf19
-  languageName: node
-  linkType: hard
-
 "@prompthash/schema@workspace:packages/schema":
   version: 0.0.0-use.local
   resolution: "@prompthash/schema@workspace:packages/schema"
@@ -2933,16 +2915,6 @@ __metadata:
     zod: "npm:^4.4.3"
   languageName: unknown
   linkType: soft
-
-"@prompthash/sdk@file:../packages/sdk::locator=prompthash-server%40workspace%3Aserver":
-  version: 0.1.0
-  resolution: "@prompthash/sdk@file:../packages/sdk#../packages/sdk::hash=e5f953&locator=prompthash-server%40workspace%3Aserver"
-  dependencies:
-    "@stellar/stellar-sdk": "npm:^17.1.0"
-    libsodium-wrappers: "npm:^0.8.4"
-  checksum: 10c0/4222296e4774081210f5c95d43e915d95a2fb2e07bd44f14182a692f6fd60816cb66f95e0d8ea27f6d46a385c1de3585199244d128122c98a35b38674c907fdc
-  languageName: node
-  linkType: hard
 
 "@prompthash/sdk@workspace:packages/sdk":
   version: 0.0.0-use.local

@@ -34,6 +34,16 @@ const UNLOCK_ERROR_META: Record<UnlockErrorCode, Omit<UnlockErrorMeta, "code">> 
   INTEGRITY_FAILURE: { category: "server", retryable: false, i18nKey: "INTEGRITY_FAILURE" },
   TEMPORARY_FAILURE: { category: "server", retryable: true, i18nKey: "TEMPORARY_FAILURE" },
   IDEMPOTENCY_CONFLICT: { category: "server", retryable: false, i18nKey: "IDEMPOTENCY_CONFLICT" },
+  PROMPT_NOT_FOUND: { category: "server", retryable: false, i18nKey: "PROMPT_NOT_FOUND" },
+  INVALID_STATE: { category: "server", retryable: false, i18nKey: "INVALID_STATE" },
+  UNAUTHORIZED: { category: "access", retryable: false, i18nKey: "UNAUTHORIZED" },
+  INVALID_INPUT: { category: "server", retryable: false, i18nKey: "INVALID_INPUT" },
+  VALIDATION_ERROR: { category: "server", retryable: false, i18nKey: "VALIDATION_ERROR" },
+  STALE_REQUEST: { category: "server", retryable: true, i18nKey: "STALE_REQUEST" },
+  NOT_FOUND: { category: "server", retryable: false, i18nKey: "NOT_FOUND" },
+  OPERATION_NOT_ALLOWED: { category: "server", retryable: false, i18nKey: "OPERATION_NOT_ALLOWED" },
+  DUPLICATE_EVENT: { category: "server", retryable: false, i18nKey: "DUPLICATE_EVENT" },
+  INTERNAL_ERROR: { category: "server", retryable: true, i18nKey: "INTERNAL_ERROR" },
   [NETWORK_ERROR_CODE]: { category: "server", retryable: true, i18nKey: "NETWORK_ERROR" },
 };
 

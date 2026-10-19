@@ -32,8 +32,21 @@ interface ProbeResult {
   timestamp: string;
 }
 
-interface StatusResponse {
+export type PublicStatusState = "operational" | "degraded" | "maintenance" | "paused" | "outage";
+
+interface MaintenanceWindow {
+  id: string;
+  title: string;
+  message: string;
+  endsAt: string;
+}
+
+export interface StatusResponse {
   status: ServiceStatus;
+  /** Public state (#986); absent on responses from older deployments. */
+  state?: PublicStatusState;
+  paused?: boolean | null;
+  maintenance?: MaintenanceWindow[];
   timestamp: string;
   uptime: number;
   services: ServiceCheck[];
@@ -44,10 +57,26 @@ interface StatusResponse {
   };
 }
 
-function overallColor(status: ServiceStatus) {
-  if (status === "up") return "emerald";
-  if (status === "degraded") return "amber";
-  return "rose";
+const LEGACY_STATE: Record<ServiceStatus, PublicStatusState> = {
+  up: "operational",
+  degraded: "degraded",
+  down: "outage",
+};
+
+export const STATE_COPY: Record<
+  PublicStatusState,
+  { title: string; color: "emerald" | "amber" | "rose" }
+> = {
+  operational: { title: "All systems operational", color: "emerald" },
+  degraded: { title: "Some systems are degraded", color: "amber" },
+  maintenance: { title: "Scheduled maintenance in progress", color: "amber" },
+  paused: { title: "Marketplace paused: purchases and listings are temporarily disabled", color: "amber" },
+  outage: { title: "Outage detected", color: "rose" },
+};
+
+/** Public state of a response, falling back to the legacy status field. */
+export function resolveState(data: StatusResponse): PublicStatusState {
+  return data.state ?? LEGACY_STATE[data.status];
 }
 
 function StatusIcon({ status }: { status: ServiceStatus }) {
@@ -172,7 +201,8 @@ export default function StatusPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const color = data ? overallColor(data.status) : "slate";
+  const state = data ? resolveState(data) : null;
+  const color = state ? STATE_COPY[state].color : "slate";
 
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_60%_40%_at_0%_0%,rgba(34,211,238,0.08),transparent),linear-gradient(180deg,#080b0f_0%,#0d1117_50%,#080b0f_100%)] text-white">
@@ -200,9 +230,9 @@ export default function StatusPage() {
                   : "border-rose-300/25 bg-rose-300/10"
             }`}
           >
-            {data.status === "up" ? (
+            {color === "emerald" ? (
               <CheckCircle2 className="h-8 w-8 shrink-0 text-emerald-400" />
-            ) : data.status === "degraded" ? (
+            ) : color === "amber" ? (
               <AlertTriangle className="h-8 w-8 shrink-0 text-amber-400" />
             ) : (
               <ServerCrash className="h-8 w-8 shrink-0 text-rose-400" />
@@ -211,11 +241,7 @@ export default function StatusPage() {
               <p className={`text-lg font-semibold ${
                 color === "emerald" ? "text-emerald-100" : color === "amber" ? "text-amber-100" : "text-rose-100"
               }`}>
-                {data.status === "up"
-                  ? "All systems operational"
-                  : data.status === "degraded"
-                    ? "Some systems are degraded"
-                    : "Outage detected"}
+                {state && STATE_COPY[state].title}
               </p>
               <p className="text-sm text-slate-400">
                 Last checked: {lastChecked?.toLocaleTimeString() ?? "—"}
@@ -231,6 +257,25 @@ export default function StatusPage() {
               Refresh
             </Button>
           </div>
+        )}
+
+        {/* Active maintenance windows */}
+        {data?.maintenance && data.maintenance.length > 0 && (
+          <section className="mt-6 space-y-3">
+            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-500">Maintenance</h2>
+            {data.maintenance.map((window) => (
+              <div
+                key={window.id}
+                className="rounded-xl border border-amber-300/25 bg-amber-300/10 px-5 py-4"
+              >
+                <p className="font-medium text-amber-100">{window.title}</p>
+                <p className="mt-1 text-sm text-slate-300">{window.message}</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Until {new Date(window.endsAt).toLocaleString()}
+                </p>
+              </div>
+            ))}
+          </section>
         )}
 
         {/* Service list */}

@@ -1,5 +1,6 @@
 import connectDb from "../db/connectDb";
 import Approval from "../models/Approval";
+import { SignedReceiptService } from "./signedReceiptService";
 
 export interface ApprovalRecord {
   approval: IApproval;
@@ -50,6 +51,56 @@ export class ApprovalService {
       status: "pending",
     });
 
+    const intentReceipt = await SignedReceiptService.createReceipt({
+      operationType: "MAINTAINER_ACTION",
+      actor: params.actor,
+      status: "PENDING",
+      payload: {
+        actionId: params.actionId,
+        actionType: params.actionType,
+        scope: params.scope,
+        reason: params.reason,
+      },
+      externalReferences: { idempotencyKey: `approval-intent:${approval._id}` },
+    });
+    approval.intentReceiptId = intentReceipt.receiptId;
+    await approval.save();
+
+    return approval;
+  }
+
+  /** Record the terminal result so a completed or failed action is reviewable. */
+  static async recordOutcome(params: {
+    approvalId: string;
+    actor: string;
+    status: "SUCCESS" | "FAILED";
+    details?: Record<string, unknown>;
+  }): Promise<IApproval> {
+    await connectDb();
+    const approval = await Approval.findOne({ _id: params.approvalId });
+    if (!approval) throw new Error("Approval not found");
+    if (approval.actor.toLowerCase() !== params.actor.toLowerCase()) {
+      throw new Error("Approval actor mismatch");
+    }
+    if (approval.status !== "approved") {
+      throw new Error("Only approved actions can record an outcome");
+    }
+
+    const receipt = await SignedReceiptService.createReceipt({
+      operationType: "MAINTAINER_ACTION",
+      actor: params.actor,
+      status: params.status,
+      payload: {
+        actionId: approval.actionId,
+        actionType: approval.actionType,
+        scope: approval.scope,
+        ...params.details,
+      },
+      externalReferences: { idempotencyKey: `approval-outcome:${approval._id}` },
+    });
+    approval.outcome = params.status;
+    approval.outcomeReceiptId = receipt.receiptId;
+    await approval.save();
     return approval;
   }
 

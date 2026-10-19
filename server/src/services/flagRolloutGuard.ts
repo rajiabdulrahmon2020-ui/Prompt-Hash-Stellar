@@ -1,0 +1,130 @@
+/**
+ * Feature-flag rollout guard with automatic rollback verification — Issue #988.
+ *
+ * Pure, dependency-free policy layer on top of `featureFlagService.ts`
+ * (which owns persistence and per-user hashing). Keeping this module pure
+ * (no Mongo, no network) means rollout/rollback decisions are unit-testable
+ * and safe to call from routes, jobs, or CI without side effects.
+ *
+ * - Scoped: each rollout declares a blast radius (`RolloutScope`).
+ * - Monitored: caller passes observed health (`GuardSignals`); the guard
+ *   blocks or orders a rollback when thresholds are breached.
+ * - Verified: `verifyRollback` asserts the flag is disabled everywhere and
+ *   no partial-write/ledger drift remains, so a rollback never leaves
+ *   inconsistent state behind.
+ *
+ * Runbook: docs/flag-rollout-guard.md
+ */
+
+export type RolloutScope =
+  | "marketplace"
+  | "settlement"
+  | "payouts"
+  | "auth"
+  | "indexer"
+  | "global";
+
+export type RolloutEnvironment = "development" | "staging" | "production";
+
+export interface RolloutRequest {
+  flag: string;
+  scope: RolloutScope;
+  environment: RolloutEnvironment;
+  rolloutPercentage: number;
+}
+
+export interface GuardSignals {
+  /** Observed error rate 0..1 (unlock failures, settlement errors, 5xx). */
+  errorRate: number;
+  /** Active P1 incident (funds at risk, outage, exploit). */
+  p1Incident: boolean;
+  /** Domain invariant violations detected (entitlement/ledger drift). */
+  invariantViolations: number;
+}
+
+export interface GuardDecision {
+  allow: boolean;
+  requireRollback: boolean;
+  reasons: string[];
+}
+
+export interface GuardThresholds {
+  maxErrorRate: number;
+  /** Settlement/payout scopes may only ramp this far without staging soak. */
+  maxDirectProductionPercent: number;
+}
+
+export const DEFAULT_GUARD_THRESHOLDS: GuardThresholds = {
+  maxErrorRate: 0.05,
+  maxDirectProductionPercent: 10,
+};
+
+export function evaluateRolloutGuard(
+  req: RolloutRequest,
+  signals: GuardSignals,
+  thresholds: GuardThresholds = DEFAULT_GUARD_THRESHOLDS,
+): GuardDecision {
+  const reasons: string[] = [];
+  let allow = true;
+  let requireRollback = false;
+
+  if (req.rolloutPercentage < 0 || req.rolloutPercentage > 100) {
+    allow = false;
+    reasons.push("rolloutPercentage must be within 0..100");
+  }
+  if (signals.errorRate > thresholds.maxErrorRate) {
+    allow = false;
+    requireRollback = req.rolloutPercentage > 0;
+    reasons.push(
+      `errorRate ${(signals.errorRate * 100).toFixed(2)}% exceeds ${(thresholds.maxErrorRate * 100).toFixed(2)}% ceiling`,
+    );
+  }
+  if (signals.p1Incident) {
+    allow = false;
+    requireRollback = req.rolloutPercentage > 0;
+    reasons.push("active P1 incident — rollout blocked, rollback required");
+  }
+  if (signals.invariantViolations > 0) {
+    allow = false;
+    requireRollback = req.rolloutPercentage > 0;
+    reasons.push(`${signals.invariantViolations} invariant violation(s) — rollback required`);
+  }
+  if (
+    req.environment === "production" &&
+    (req.scope === "settlement" || req.scope === "payouts" || req.scope === "global") &&
+    req.rolloutPercentage > thresholds.maxDirectProductionPercent
+  ) {
+    allow = false;
+    reasons.push(
+      `${req.scope} scope may not exceed ${thresholds.maxDirectProductionPercent}% in production without staging soak`,
+    );
+  }
+  if (allow) reasons.push("guard passed: scoped, monitored, within thresholds");
+
+  return { allow, requireRollback, reasons };
+}
+
+export interface RollbackEvidence {
+  /** Flag reads disabled in every environment (dev/staging/production). */
+  flagDisabledEverywhere: boolean;
+  /** No partial writes: indexer, outbox, and entitlement cache agree. */
+  noPartialWrites: boolean;
+  /** Domain invariants pass after rollback (entitlement/ledger zero-drift). */
+  invariantsPass: boolean;
+  /** No ledger/settlement drift vs. on-chain state. */
+  noLedgerDrift: boolean;
+}
+
+export interface RollbackVerification {
+  verified: boolean;
+  failures: string[];
+}
+
+export function verifyRollback(evidence: RollbackEvidence): RollbackVerification {
+  const failures: string[] = [];
+  if (!evidence.flagDisabledEverywhere) failures.push("flag still enabled in at least one environment");
+  if (!evidence.noPartialWrites) failures.push("partial writes detected (indexer/outbox/entitlement disagree)");
+  if (!evidence.invariantsPass) failures.push("domain invariants failing after rollback");
+  if (!evidence.noLedgerDrift) failures.push("ledger/settlement drift vs. on-chain state");
+  return { verified: failures.length === 0, failures };
+}

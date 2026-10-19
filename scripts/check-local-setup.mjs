@@ -281,7 +281,8 @@ const PLACEHOLDER_PATTERNS = [
   /^replace-with/i,
   /^BASE64_/i,
   /^[CG]X{10,}/,
-  /^your-/i,
+  /^your[-_]/i,
+  /_here$/i,
   /^<.*>$/,
 ];
 
@@ -289,7 +290,7 @@ const STELLAR_CONTRACT_ID = /^C[A-Z0-9]{55}$/;
 const STELLAR_ACCOUNT_ID = /^G[A-Z0-9]{55}$/;
 const BASE64_KEY = /^[A-Za-z0-9+/=]{20,}$/;
 const HTTP_URL = /^https?:\/\/.+/i;
-const VALID_NETWORKS = new Set(["TESTNET", "MAINNET", "LOCAL", "FUTURENET"]);
+const VALID_NETWORKS = new Set(["PUBLIC", "TESTNET", "FUTURENET", "LOCAL", "STANDALONE"]);
 
 function isPlaceholder(val) {
   if (!val) return true;
@@ -324,7 +325,7 @@ function validateVarFormat(key, val) {
       break;
     case "PUBLIC_STELLAR_NETWORK":
       if (!VALID_NETWORKS.has(val.toUpperCase())) {
-        return "Use TESTNET, MAINNET, LOCAL, or FUTURENET";
+        return "Use PUBLIC, TESTNET, FUTURENET, or LOCAL (the frontend rejects MAINNET)";
       }
       break;
     case "CHALLENGE_TOKEN_SECRET":

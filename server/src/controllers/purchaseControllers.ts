@@ -7,6 +7,11 @@ import Review from "../models/Review";
 import { AuditLog } from "../models/AuditLog";
 import { markPrivate } from "../middleware/etag";
 import {
+  contentDispositionValue,
+  escapeQuotedCsvField,
+  neutralizeCsvFormula,
+} from "../services/sensitiveContent";
+import {
   reconcilePayoutEvents,
   type PayoutEventSource,
   type PayoutPromptSource,
@@ -361,13 +366,9 @@ export const GetCreatorPayoutStatement = async (
     if (prompts.length === 0) {
       const empty = { statement: [], summary: emptySummary, status: "settled", balanced: true };
       if (format === "csv" || req.headers.accept?.includes("text/csv")) {
-        const csvHeader = payoutCsvHeader;
         res.setHeader("Content-Type", "text/csv");
-        res.setHeader(
-          "Content-Disposition",
-          `attachment; filename="payout-statement-${walletAddress.slice(0, 8)}.csv"`,
-        );
-        return res.status(200).send(csvHeader);
+        res.setHeader("Content-Disposition", payoutStatementDisposition(walletAddress));
+        return res.status(200).send(payoutCsvHeader);
       }
       return res.json(empty);
     }
@@ -415,16 +416,11 @@ export const GetCreatorPayoutStatement = async (
     const reconciled = reconcilePayoutEvents(purchases, promptByKey);
 
     if (format === "csv" || req.headers.accept?.includes("text/csv")) {
-      const csvRows = reconciled.statement
-        .map((row) => rowToCsv(row))
-        .join("\n");
+      const csvRows = reconciled.statement.map((row) => rowToCsv(row)).join("\n");
 
       res.setHeader("Content-Type", "text/csv");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="payout-statement-${walletAddress.slice(0, 8)}.csv"`,
-      );
-      return res.status(200).send(payoutCsvHeader + csvRows);
+      res.setHeader("Content-Disposition", payoutStatementDisposition(walletAddress));
+      return res.status(200).send(`${payoutCsvHeader}${csvRows}`);
     }
 
     return res.json(reconciled);
@@ -439,19 +435,34 @@ export const GetCreatorPayoutStatement = async (
 const payoutCsvHeader =
   `"Sale Date","Type","Prompt Title","Prompt ID","Buyer Address","Gross Amount (XLM)","Platform Fee (XLM)","Creator Amount (XLM)","Settlement Status","Transaction Hash"\n`;
 
+/**
+ * A buyer address, prompt title, tx hash, etc. can be attacker-influenced.
+ * Every cell is guarded against CSV formula injection (`'` prefix on
+ * dangerous leading characters) and embedded quotes are doubled, while the
+ * historical quoting style (quoted text columns, bare enum/number columns) is
+ * preserved for existing subscribers of this export.
+ */
 function rowToCsv(row: PayoutStatementLine): string {
   return [
-    `"${row.saleDate}"`,
-    row.kind,
-    `"${row.promptTitle.replace(/"/g, '""')}"`,
-    `"${row.promptId}"`,
-    `"${row.buyerAddress}"`,
-    row.grossAmount,
-    row.platformFee,
-    row.creatorAmount,
-    row.settlementStatus,
-    `"${row.txHash}"`,
+    escapeQuotedCsvField(row.saleDate),
+    neutralizeCsvFormula(row.kind),
+    escapeQuotedCsvField(row.promptTitle),
+    escapeQuotedCsvField(row.promptId),
+    escapeQuotedCsvField(row.buyerAddress),
+    String(row.grossAmount),
+    String(row.platformFee),
+    String(row.creatorAmount),
+    neutralizeCsvFormula(row.settlementStatus),
+    escapeQuotedCsvField(row.txHash),
   ].join(",");
+}
+
+/** Content-Disposition with a sanitized filename (no header injection). */
+function payoutStatementDisposition(walletAddress: string): string {
+  return contentDispositionValue(
+    `payout-statement-${walletAddress.slice(0, 8)}.csv`,
+    "payout-statement.csv",
+  );
 }
 
 /**

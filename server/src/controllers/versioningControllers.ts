@@ -4,13 +4,7 @@ import Prompt from "../models/Prompt";
 import PromptVersion from "../models/PromptVersion";
 import Purchase from "../models/Purchase";
 import User from "../models/User";
-import { notifyPromptUpdateBuyers } from "../services/notificationDelivery";
-import { invalidatePromptCaches } from "../services/cacheService";
-import {
-  currentPromptSchemaVersion,
-  transformPromptForApi,
-  SchemaVersionError,
-} from "../services/schemaVersioning";
+import { deliverNotification } from "../services/notificationRouting";
 
 export const PostPromptUpdate = async (req: Request, res: Response): Promise<Response> => {
   try {
@@ -48,9 +42,25 @@ export const PostPromptUpdate = async (req: Request, res: Response): Promise<Res
       await invalidatePromptCaches(String(prompt.onChainId));
     }
 
-    // Notify all buyers of this prompt about the update
+    // Notify all buyers of this prompt about the update. Optional type: the
+    // routing service suppresses it for buyers who opted out, and the
+    // dedupeKey makes repeated version-post retries deliver exactly once.
     const purchases = await Purchase.find({ promptId: String(prompt._id) });
-    await notifyPromptUpdateBuyers(purchases, prompt, nextVersion, changeNote ?? "");
+    await Promise.all(
+      purchases.map((purchase: { buyerWallet: string }) =>
+        deliverNotification({
+          recipientWallet: purchase.buyerWallet,
+          type: "prompt_update",
+          promptId: String(prompt._id),
+          promptTitle: prompt.title,
+          message: `"${prompt.title}" has been updated by the creator.`,
+          versionIndex: nextVersion,
+          changeNote: changeNote ?? "",
+          dedupeKey: `prompt_update:${String(prompt._id)}:v${nextVersion}:${purchase.buyerWallet.toLowerCase()}`,
+          requestId: req.correlationId ?? null,
+        }),
+      ),
+    );
 
     return res.status(201).json({ message: "Version posted.", versionIndex: nextVersion });
   } catch (err) {

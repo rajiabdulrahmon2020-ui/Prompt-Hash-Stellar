@@ -11,6 +11,9 @@ export interface IApproval extends Document {
   approvedAt: Date;
   expiresAt: Date;
   status: "pending" | "approved" | "rejected";
+  intentReceiptId?: string;
+  outcomeReceiptId?: string;
+  outcome?: "SUCCESS" | "FAILED";
   rejectedAt?: Date;
   rejectionReason?: string;
   auditTrail?: {
@@ -41,6 +44,9 @@ const approvalSchema = new Schema(
       enum: ["pending", "approved", "rejected"],
       default: "pending",
     },
+    intentReceiptId: { type: String, index: true },
+    outcomeReceiptId: { type: String, index: true },
+    outcome: { type: String, enum: ["SUCCESS", "FAILED"] },
     rejectedAt: { type: Date },
     rejectionReason: { type: String },
     auditTrail: [

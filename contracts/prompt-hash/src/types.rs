@@ -944,11 +944,4 @@ pub trait PromptHashTrait {
 
     fn upgrade(env: Env, new_wasm_hash: BytesN<32>) -> Result<(), Error>;
     fn extend_ttl(env: Env, key: DataKey) -> Result<(), Error>;
-    fn extend_listing(
-        env: Env,
-        creator: Address,
-        prompt_id: u128,
-        extension_days: u64,
-        fee_percentage_bps: Option<u32>,
-    ) -> Result<(), Error>;
 }

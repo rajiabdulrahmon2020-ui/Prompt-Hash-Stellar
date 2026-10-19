@@ -18,8 +18,12 @@ function buildServerConfig(): PromptHashConfig {
     networkPassphrase:
       process.env.PUBLIC_STELLAR_NETWORK_PASSPHRASE ?? "Test SDF Network ; September 2015",
     promptHashContractId: process.env.PUBLIC_PROMPT_HASH_CONTRACT_ID ?? "",
-    nativeAssetContractId: process.env.PUBLIC_NATIVE_ASSET_CONTRACT_ID ?? "",
-    simulationAccount: process.env.PUBLIC_SIMULATION_ACCOUNT ?? "",
+    nativeAssetContractId: process.env.PUBLIC_STELLAR_NATIVE_ASSET_CONTRACT_ID ??
+      process.env.PUBLIC_NATIVE_ASSET_CONTRACT_ID ?? // legacy name
+      "",
+    simulationAccount: process.env.PUBLIC_STELLAR_SIMULATION_ACCOUNT ??
+      process.env.PUBLIC_SIMULATION_ACCOUNT ?? // legacy name
+      "",
     allowHttp: rpcUrl.includes("localhost"),
   };
 }

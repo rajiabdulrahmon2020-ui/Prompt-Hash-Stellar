@@ -347,6 +347,8 @@ yarn check:setup
 
 This checks Node/Yarn versions, Rust toolchain, Stellar CLI, contract tooling, dependencies, and required environment variables without printing secret values.
 
+For a deeper diagnosis (network probes, env consistency, seed data, per-failure fixes), run `yarn diagnose` — see [docs/operations/contributor-diagnostics.md](docs/operations/contributor-diagnostics.md).
+
 See [docs/environments.md](docs/environments.md) for local, testnet, and preview setup examples.
 
 ## Environment Variables

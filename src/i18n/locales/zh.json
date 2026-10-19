@@ -203,7 +203,17 @@
       "CONFIGURATION_ERROR": "我们这边出了点问题。请稍后重试。",
       "INTEGRITY_FAILURE": "无法验证提示词内容。如果持续出现，请联系支持。",
       "TEMPORARY_FAILURE": "发生临时错误。请稍后重试。",
-      "IDEMPOTENCY_CONFLICT": "此幂等键已用于不同的请求。请使用新键。"
+      "IDEMPOTENCY_CONFLICT": "此幂等键已用于不同的请求。请使用新键。",
+      "PROMPT_NOT_FOUND": "找不到该提示词。",
+      "INVALID_STATE": "在该项目的当前状态下不允许执行此操作。",
+      "UNAUTHORIZED": "您无权执行此操作。",
+      "INVALID_INPUT": "提供的部分信息无效。请检查后重试。",
+      "VALIDATION_ERROR": "无法验证该请求。请检查后重试。",
+      "STALE_REQUEST": "此请求已过期。请重试。",
+      "NOT_FOUND": "找不到所请求的项目。",
+      "OPERATION_NOT_ALLOWED": "目前不允许执行此操作。",
+      "DUPLICATE_EVENT": "此事件已被处理。",
+      "INTERNAL_ERROR": "我们这边出了点问题。请稍后重试。"
     }
   },
   "receiptErrors": {

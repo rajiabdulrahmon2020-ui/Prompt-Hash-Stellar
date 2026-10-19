@@ -6,8 +6,9 @@ import {
   recordLedgerEntry,
   getCreatorPayoutSummaryView,
   getAdminPayoutSummaryView,
-  exportLedgerReport,
+  exportLedgerReportBounded,
 } from "../services/payoutLedgerService";
+import { buildCsv, contentDispositionValue } from "../services/sensitiveContent";
 
 export const payoutLedgerRouter = express.Router();
 
@@ -71,24 +72,52 @@ payoutLedgerRouter.get(
       await connectDb();
       const creatorAddress = req.query.creatorAddress as string | undefined;
       const format = (req.query.format as string) || "json";
-      const rows = await exportLedgerReport(creatorAddress);
+      const { rows, truncated, scanLimit } = await exportLedgerReportBounded(creatorAddress);
+
+      // Truncation must be visible to accounting, never silent (#983).
+      if (truncated) {
+        console.warn("Ledger export hit the scan ceiling", {
+          action: "ledgerExportTruncated",
+          scanLimit,
+          creatorAddress: creatorAddress ?? "all",
+        });
+      }
 
       if (format === "csv") {
         const headers = ["entryId", "createdAt", "creatorAddress", "entryType", "promptId", "amount", "currency", "stellarTxRef", "referenceId", "description"];
-        const csvLines = [
-          headers.join(","),
-          ...rows.map((r) =>
-            [r.entryId, r.createdAt, r.creatorAddress, r.entryType, r.promptId, r.amount, r.currency, r.stellarTxRef, `"${r.referenceId}"`, `"${r.description}"`].join(","),
-          ),
-        ];
+        // CSV cells are escaped (RFC4180 + formula injection) because
+        // referenceId/description carry operator-supplied content.
+        const csv = buildCsv(
+          headers,
+          rows.map((r) => [
+            r.entryId,
+            r.createdAt,
+            r.creatorAddress,
+            r.entryType,
+            r.promptId,
+            r.amount,
+            r.currency,
+            r.stellarTxRef,
+            r.referenceId,
+            r.description,
+          ]),
+        );
         res.setHeader("Content-Type", "text/csv");
-        res.setHeader("Content-Disposition", `attachment; filename=ledger_export_${Date.now()}.csv`);
-        return res.send(csvLines.join("\n"));
+        res.setHeader(
+          "Content-Disposition",
+          contentDispositionValue(`ledger_export_${Date.now()}.csv`, "ledger_export.csv"),
+        );
+        // Header carries truncation so an operator piping the CSV can tell.
+        res.setHeader("X-Ledger-Export-Truncated", truncated ? "true" : "false");
+        res.setHeader("X-Ledger-Export-Scan-Limit", String(scanLimit));
+        return res.send(csv);
       }
 
       return res.json({
         success: true,
         total: rows.length,
+        truncated,
+        scanLimit,
         rows,
       });
     } catch (err: any) {

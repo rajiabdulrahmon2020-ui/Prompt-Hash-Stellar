@@ -9,7 +9,8 @@ const PLACEHOLDER_PATTERNS = [
   /^replace-with/i,
   /^BASE64_/i,
   /^[CG]X{10,}/,
-  /^your-/i,
+  /^your[-_]/i,
+  /_here$/i,
   /^<.*>$/,
 ];
 
@@ -17,6 +18,15 @@ export function isPlaceholder(val: string | undefined): boolean {
   if (!val) return true;
   return PLACEHOLDER_PATTERNS.some((re) => re.test(val));
 }
+
+/** Networks accepted by the frontend schema (src/lib/env.ts) and their passphrases. */
+export const NETWORK_PASSPHRASES: Record<string, string> = {
+  PUBLIC: "Public Global Stellar Network ; September 2015",
+  TESTNET: "Test SDF Network ; September 2015",
+  FUTURENET: "Test SDF Future Network ; October 2022",
+  LOCAL: "Standalone Network ; February 2017",
+  STANDALONE: "Standalone Network ; February 2017",
+};
 
 export interface ServerDeploymentManifest {
   network: string;
@@ -104,6 +114,19 @@ export function getServerDeploymentManifest(forceRefresh = false): ServerDeploym
 
   if (simulationAccount && !STELLAR_ACCOUNT_ID.test(simulationAccount) && isProd) {
     errors.push("PUBLIC_STELLAR_SIMULATION_ACCOUNT must be a valid 56-character Stellar public key starting with G.");
+  }
+
+  // Network name and passphrase must agree, otherwise signatures are for the wrong ledger.
+  if (isProd) {
+    const configured = process.env.PUBLIC_STELLAR_NETWORK;
+    const explicitPassphrase = process.env.PUBLIC_STELLAR_NETWORK_PASSPHRASE;
+    if (configured && !(configured in NETWORK_PASSPHRASES)) {
+      errors.push(
+        "PUBLIC_STELLAR_NETWORK must be one of PUBLIC, TESTNET, FUTURENET, LOCAL (MAINNET is not accepted).",
+      );
+    } else if (configured && explicitPassphrase && explicitPassphrase !== NETWORK_PASSPHRASES[configured]) {
+      errors.push("PUBLIC_STELLAR_NETWORK_PASSPHRASE does not match PUBLIC_STELLAR_NETWORK.");
+    }
   }
 
   // Reject simulation account equal to unlock public key in production

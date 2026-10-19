@@ -114,6 +114,7 @@ vi.mock("../db/connectDb", () => ({ default: vi.fn() }));
 import { recordAuditEvent } from "../services/auditTrail";
 import {
   applyDisputeTransition,
+  DISPUTE_TRANSITIONS,
   recordUnlockFailure,
   recordUnlockSuccess,
   sweepStaleDisputes,
@@ -138,6 +139,27 @@ describe("disputed purchase resolution (#755)", () => {
 
   afterEach(() => {
     delete process.env.FULFILLMENT_TIMEOUT_MS;
+  });
+
+  it("defines every recovery transition and leaves terminal outcomes closed", () => {
+    const expectedEvents = [
+      "unlock_failed",
+      "unlock_succeeded",
+      "refund_requested",
+      "retry_scheduled",
+      "refund_approved",
+      "refund_rejected",
+      "resolved",
+      "escalated",
+      "refund_settled",
+    ] as const;
+    expect(Object.keys(DISPUTE_TRANSITIONS).sort()).toEqual([...expectedEvents].sort());
+    expect(DISPUTE_TRANSITIONS.refund_approved.to).toBe("refunded");
+    expect(DISPUTE_TRANSITIONS.refund_settled.to).toBe("refunded");
+    expect(DISPUTE_TRANSITIONS.resolved.to).toBe("resolved");
+    expect(DISPUTE_TRANSITIONS.unlock_failed.from).toContain("resolved");
+    expect(DISPUTE_TRANSITIONS.unlock_succeeded.from).not.toContain("delivered");
+    expect(DISPUTE_TRANSITIONS.refund_requested.from).not.toContain("refunded");
   });
 
   it("opens a recoverable dispute when a paid unlock fails (partial failure)", async () => {

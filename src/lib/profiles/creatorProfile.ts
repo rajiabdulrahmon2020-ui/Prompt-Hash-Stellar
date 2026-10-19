@@ -42,7 +42,8 @@ const BLOCKED_IP_PATTERNS = [
 const BLOCKED_DOMAINS = [
   "localhost",
   "metadata.google.internal",
-  "169.254.169.254", // Cloud metadata endpoints
+  // 169.254.169.254 is covered by the link-local IP pattern so the error
+  // message stays consistent with other private-range blocks.
   "metadata.aws",
   "metadata.azure",
 ];
@@ -58,57 +59,54 @@ export function validateUrlSafety(url: string): string | null {
 
   const trimmed = url.trim();
 
-  // Must use http or https
-  if (!/^https?:\/\/.+/.test(trimmed)) {
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return "Invalid URL format";
+  }
+
+  // Check protocol (only http/https allowed)
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     return "Only HTTP and HTTPS protocols are allowed";
   }
 
-  try {
-    const parsed = new URL(trimmed);
+  // Extract hostname for validation. WHATWG URLs keep IPv6 addresses
+  // bracketed ("[::1]"), so strip them before matching IP patterns.
+  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
 
-    // Check protocol (only http/https allowed)
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return "Only HTTP and HTTPS protocols are allowed";
-    }
-
-    // Extract hostname for validation (strip IPv6 brackets if present)
-    const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-
-    // Block localhost and variations
-    if (hostname === "localhost" || hostname === "127.0.0.1") {
-      return "Localhost URLs are not allowed";
-    }
-
-    // Block internal/private IP ranges
-    for (const pattern of BLOCKED_IP_PATTERNS) {
-      if (pattern.test(hostname)) {
-        return "Internal/private IP addresses are not allowed";
-      }
-    }
-
-    // Block known cloud metadata endpoints
-    if (BLOCKED_DOMAINS.includes(hostname)) {
-      return "This domain is not allowed";
-    }
-
-    // Block URLs with credentials (username:password@host)
-    if (parsed.username || parsed.password) {
-      return "URLs with credentials are not allowed";
-    }
-
-    // Block non-standard ports that might target internal services
-    if (parsed.port) {
-      const port = parseInt(parsed.port, 10);
-      // Allow standard web ports
-      if (![80, 443, 8080, 8443].includes(port)) {
-        return "Only standard web ports are allowed (80, 443, 8080, 8443)";
-      }
-    }
-
-    return null; // Valid
-  } catch (error) {
-    return "Invalid URL format";
+  // Block localhost and variations
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    return "Localhost URLs are not allowed";
   }
+
+  // Block known cloud metadata endpoints
+  if (BLOCKED_DOMAINS.includes(hostname)) {
+    return "This domain is not allowed";
+  }
+
+  // Block internal/private IP ranges (IPv4 and IPv6)
+  for (const pattern of BLOCKED_IP_PATTERNS) {
+    if (pattern.test(hostname)) {
+      return "Internal/private IP addresses are not allowed";
+    }
+  }
+
+  // Block URLs with credentials (username:password@host)
+  if (parsed.username || parsed.password) {
+    return "URLs with credentials are not allowed";
+  }
+
+  // Block non-standard ports that might target internal services
+  if (parsed.port) {
+    const port = parseInt(parsed.port, 10);
+    // Allow standard web ports
+    if (![80, 443, 8080, 8443].includes(port)) {
+      return "Only standard web ports are allowed (80, 443, 8080, 8443)";
+    }
+  }
+
+  return null; // Valid
 }
 
 /**

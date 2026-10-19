@@ -203,7 +203,17 @@
       "CONFIGURATION_ERROR": "Algo salió mal por nuestra parte. Inténtalo de nuevo más tarde.",
       "INTEGRITY_FAILURE": "No se pudo verificar el contenido del prompt. Contacta con soporte si esto continúa.",
       "TEMPORARY_FAILURE": "Se produjo un error temporal. Inténtalo de nuevo en un momento.",
-      "IDEMPOTENCY_CONFLICT": "Esta clave de idempotencia se usó con una solicitud diferente. Usa una clave nueva."
+      "IDEMPOTENCY_CONFLICT": "Esta clave de idempotencia se usó con una solicitud diferente. Usa una clave nueva.",
+      "PROMPT_NOT_FOUND": "No se pudo encontrar ese prompt.",
+      "INVALID_STATE": "Esta acción no está permitida en el estado actual del elemento.",
+      "UNAUTHORIZED": "No tienes autorización para realizar esta acción.",
+      "INVALID_INPUT": "Parte de la información proporcionada no es válida. Revísala e inténtalo de nuevo.",
+      "VALIDATION_ERROR": "No se pudo validar la solicitud. Revísala e inténtalo de nuevo.",
+      "STALE_REQUEST": "Esta solicitud es demasiado antigua. Inténtalo de nuevo.",
+      "NOT_FOUND": "No se pudo encontrar el elemento solicitado.",
+      "OPERATION_NOT_ALLOWED": "Esta operación no está permitida en este momento.",
+      "DUPLICATE_EVENT": "Este evento ya se procesó.",
+      "INTERNAL_ERROR": "Algo salió mal de nuestro lado. Inténtalo de nuevo más tarde."
     }
   },
   "receiptErrors": {

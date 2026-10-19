@@ -203,7 +203,17 @@
       "CONFIGURATION_ERROR": "Une erreur est survenue de notre côté. Réessayez plus tard.",
       "INTEGRITY_FAILURE": "Le contenu du prompt n'a pas pu être vérifié. Contactez l'assistance si cela persiste.",
       "TEMPORARY_FAILURE": "Une erreur temporaire est survenue. Réessayez dans un instant.",
-      "IDEMPOTENCY_CONFLICT": "Cette clé d'idempotence a été utilisée avec une demande différente. Utilisez une nouvelle clé."
+      "IDEMPOTENCY_CONFLICT": "Cette clé d'idempotence a été utilisée avec une demande différente. Utilisez une nouvelle clé.",
+      "PROMPT_NOT_FOUND": "Ce prompt est introuvable.",
+      "INVALID_STATE": "Cette action n'est pas autorisée dans l'état actuel de l'élément.",
+      "UNAUTHORIZED": "Vous n'êtes pas autorisé à effectuer cette action.",
+      "INVALID_INPUT": "Certaines informations fournies ne sont pas valides. Vérifiez-les et réessayez.",
+      "VALIDATION_ERROR": "La requête n'a pas pu être validée. Vérifiez-la et réessayez.",
+      "STALE_REQUEST": "Cette requête est trop ancienne. Veuillez réessayer.",
+      "NOT_FOUND": "L'élément demandé est introuvable.",
+      "OPERATION_NOT_ALLOWED": "Cette opération n'est pas autorisée pour le moment.",
+      "DUPLICATE_EVENT": "Cet événement a déjà été traité.",
+      "INTERNAL_ERROR": "Un problème est survenu de notre côté. Veuillez réessayer plus tard."
     }
   },
   "receiptErrors": {

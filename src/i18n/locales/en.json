@@ -203,7 +203,17 @@
       "CONFIGURATION_ERROR": "Something went wrong on our end. Please try again later.",
       "INTEGRITY_FAILURE": "Prompt content could not be verified. Please contact support if this persists.",
       "TEMPORARY_FAILURE": "A temporary error occurred. Please try again in a moment.",
-      "IDEMPOTENCY_CONFLICT": "This idempotency key was used with a different request. Please use a new key."
+      "IDEMPOTENCY_CONFLICT": "This idempotency key was used with a different request. Please use a new key.",
+      "PROMPT_NOT_FOUND": "That prompt could not be found.",
+      "INVALID_STATE": "This action isn't allowed from the item's current status.",
+      "UNAUTHORIZED": "You are not authorized to perform this action.",
+      "INVALID_INPUT": "Some of the information provided is not valid. Please check it and try again.",
+      "VALIDATION_ERROR": "The request could not be validated. Please check it and try again.",
+      "STALE_REQUEST": "This request is too old. Please try again.",
+      "NOT_FOUND": "The requested item could not be found.",
+      "OPERATION_NOT_ALLOWED": "This operation is not allowed right now.",
+      "DUPLICATE_EVENT": "This event has already been processed.",
+      "INTERNAL_ERROR": "Something went wrong on our end. Please try again later."
     }
   },
   "receiptErrors": {

@@ -13,7 +13,8 @@ import {
   PurchaseFailureReason,
 } from "../../src/lib/observability/purchaseFunnelMetrics";
 import { recordAuditEvent } from "../../server/src/services/auditTrail";
-import { apiError, ErrorCode } from "../../src/lib/api/errorCodes";
+import { ErrorCode } from "../../src/lib/api/errorCodes";
+import { sendApiError } from "../../src/lib/api/problemDetails";
 import { isPlaceholder } from "../../src/lib/validation/envValidator";
 
 type ExtendedRequest = VercelRequest & {
@@ -24,6 +25,16 @@ type ExtendedRequest = VercelRequest & {
   };
   requestId?: string | null;
 };
+
+/**
+ * Actions this public endpoint may sign (#963). Its tokens share
+ * CHALLENGE_TOKEN_SECRET with server-owned tokens (wallet sessions and
+ * identity-link challenges) that verifiers tell apart only by `action`. A
+ * wallet session is a bearer token that needs no wallet signature, so minting
+ * one here would let anyone act as any wallet. Default-deny: only actions a
+ * public client legitimately requests are allowed.
+ */
+const PUBLIC_CHALLENGE_ACTIONS: ReadonlySet<string> = new Set(["unlock"]);
 
 /* eslint-disable no-unused-vars */
 export interface ChallengeRequest {
@@ -68,9 +79,9 @@ async function handler(
   res: VercelResponse,
 ): Promise<void> {
   if (req.method !== "POST") {
-    res
-      .status(405)
-      .json(apiError(ErrorCode.METHOD_NOT_ALLOWED, "Method not allowed."));
+    sendApiError(req, res, ErrorCode.METHOD_NOT_ALLOWED, "Method not allowed.", {
+      status: 405,
+    });
     return;
   }
 
@@ -113,14 +124,12 @@ async function handler(
     res.setHeader("X-RateLimit-Limit", rateLimit.limit);
     res.setHeader("X-RateLimit-Remaining", 0);
     res.setHeader("X-RateLimit-Reset", rateLimit.reset);
-    res.status(429).json(
-      apiError(
-        ErrorCode.RATE_LIMIT_IP,
-        "Too many requests. Please try again later.",
-        {
-          reset: rateLimit.reset,
-        },
-      ),
+    sendApiError(
+      req,
+      res,
+      ErrorCode.RATE_LIMIT_IP,
+      "Too many requests. Please try again later.",
+      { status: 429, reset: rateLimit.reset },
     );
     return;
   }
@@ -132,21 +141,37 @@ async function handler(
   const secret = process.env.CHALLENGE_TOKEN_SECRET;
   if (!secret || isPlaceholder(secret) || secret.length < 16) {
     req.logger.error("CHALLENGE_TOKEN_SECRET is not configured correctly.");
-    res
-      .status(500)
-      .json(apiError(ErrorCode.CONFIGURATION_ERROR, "Configuration error."));
+    sendApiError(req, res, ErrorCode.CONFIGURATION_ERROR, "Configuration error.", {
+      status: 500,
+    });
     return;
   }
 
   if (!address || !promptId) {
+    sendApiError(
+      req,
+      res,
+      ErrorCode.MISSING_FIELDS,
+      "address and promptId are required.",
+      { status: 400 },
+    );
+    return;
+  }
+
+  if (!PUBLIC_CHALLENGE_ACTIONS.has(String(action))) {
+    req.logger.warn({ action }, "Refused challenge for a non-public action");
+    void recordAuditEvent({
+      action: "challenge_issued",
+      result: "blocked",
+      promptId: String(promptId),
+      walletAddress: String(address),
+      requestId: req.requestId ?? null,
+      clientIp,
+      reason: "unsupported_action",
+    });
     res
       .status(400)
-      .json(
-        apiError(
-          ErrorCode.MISSING_FIELDS,
-          "address and promptId are required.",
-        ),
-      );
+      .json(apiError(ErrorCode.CHALLENGE_INVALID, "Unsupported challenge action."));
     return;
   }
 

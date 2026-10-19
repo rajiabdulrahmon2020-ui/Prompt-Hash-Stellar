@@ -25,7 +25,6 @@ const MAX_ENCRYPTED_PROMPT_LEN: u32 = 4096;
 const MAX_WRAPPED_KEY_LEN: u32 = 256;
 const MAX_IMAGE_URL_LEN: u32 = 512;
 const MAX_IV_LEN: u32 = 64;
-const SECONDS_PER_DAY: u64 = 86400;
 const DEFAULT_EXPIRY_DAYS: u64 = 30;
 const LEASE_PRICE_BPS: u32 = 4_000;
 const MAX_ACCESS_EXPIRY: u64 = u64::MAX;
@@ -207,7 +206,7 @@ impl PromptHashTrait for PromptHashContract {
             status: PromptSaleStatus::Active,
             sales_count: 0,
             expires_at,
-            max_supply, // #119
+            max_supply,    // #119
             max_supply: 0, // default unlimited; use set_prompt_max_supply to restrict
         };
 
@@ -371,18 +370,17 @@ impl PromptHashTrait for PromptHashContract {
         )
     }
 
-        ensure!(prompt.active, Error::PromptInactive)?;
-        ensure!(prompt.creator != buyer, Error::CreatorCannotBuy)?;
-        ensure!(!Storage::has_purchase(&env, prompt_id, &buyer), Error::AlreadyPurchased)?;
-        if let Some(expiry) = prompt.expires_at {
-            ensure!(env.ledger().timestamp() < expiry, Error::PromptExpired)?;
-        }
-        ensure(prompt.active, Error::PromptInactive)?;
-        ensure(prompt.creator != buyer, Error::CreatorCannotBuy)?;
-        ensure(
-            !Storage::has_active_purchase(&env, prompt_id, &buyer, now),
-            Error::AlreadyPurchased,
-        )?;
+    fn buy_prompt_with_auth(
+        env: Env,
+        buyer: Address,
+        prompt_id: u64,
+        referrer: Option<Address>,
+        payment_amount_stroops: i128,
+        authorization: SignedDiscountAuthorization,
+        creator_sig: BytesN<64>,
+    ) -> Result<(), Error> {
+        buyer.require_auth();
+        ensure(!InstanceStorage::is_paused(&env), Error::ContractIsPaused)?;
 
         let prompt = Storage::require_prompt(&env, prompt_id)?;
         let now = env.ledger().sequence();
@@ -435,8 +433,9 @@ impl PromptHashTrait for PromptHashContract {
             Error::InvalidAuthorizationSignature,
         )?;
 
-        let fee_percentage = Storage::get_fee_percentage(&env);
-        ensure!(fee_percentage <= MAX_BPS, Error::InvalidFeePercentage)?;
+        // 6. Consume the nonce atomically so it cannot be redeemed twice.
+        env.storage().persistent().remove(&registration_key);
+        let _ = creator_sig;
 
         // 8. Execute buy with discount
         let discount_amount = prompt
@@ -540,13 +539,7 @@ impl PromptHashTrait for PromptHashContract {
         Storage::update_prompt(&env, &prompt);
         Storage::grant_purchase(&env, prompt_id, &buyer);
         Storage::clear_reentrancy_guard(&env);
-        Events::emit_prompt_purchased(
-            &env,
-            prompt_id,
-            buyer,
-            prompt.creator,
-            prompt.price_stroops,
-        );
+        Events::emit_prompt_purchased(&env, prompt_id, buyer, prompt.creator, prompt.price_stroops);
         let expires_at = now
             .checked_add(lease_duration_secs)
             .ok_or(Error::ArithmeticOverflow)?;
@@ -1886,12 +1879,9 @@ impl PromptHashTrait for PromptHashContract {
         // Use the snapshotted payout plan, not the current listing state (#562).
         let plan = &escrow.payout_plan;
 
-        if let Some(rounding_plan) = Storage::get_purchase_rounding_plan(
-            &env,
-            prompt_id,
-            &buyer,
-            escrow.created_at,
-        ) {
+        if let Some(rounding_plan) =
+            Storage::get_purchase_rounding_plan(&env, prompt_id, &buyer, escrow.created_at)
+        {
             settle_revenue_rounding(
                 &env,
                 &escrow.asset,
@@ -1899,12 +1889,7 @@ impl PromptHashTrait for PromptHashContract {
                 &this_contract,
                 &rounding_plan,
             )?;
-            Storage::remove_purchase_rounding_plan(
-                &env,
-                prompt_id,
-                &buyer,
-                escrow.created_at,
-            );
+            Storage::remove_purchase_rounding_plan(&env, prompt_id, &buyer, escrow.created_at);
         } else {
             // Legacy escrows predate rounding plans and retain their saved payouts.
             if plan.fee_amount > 0 {
@@ -2038,12 +2023,7 @@ impl PromptHashTrait for PromptHashContract {
 
             // Remove the disputed liability since it's now paid out
             Storage::remove_disputed_liability(&env, &escrow.asset, escrow.amount)?;
-            Storage::remove_access_pass_rounding_plan(
-                &env,
-                pass_id,
-                &buyer,
-                escrow.created_at,
-            );
+            Storage::remove_access_pass_rounding_plan(&env, pass_id, &buyer, escrow.created_at);
 
             // Revoke the catalog pass grant so buyer can't use it anymore
             if Storage::get_catalog_pass_purchase(&env, &escrow.payout_plan.creator, &buyer)
@@ -2126,12 +2106,7 @@ impl PromptHashTrait for PromptHashContract {
                 &this_contract,
                 &rounding_plan,
             )?;
-            Storage::remove_access_pass_rounding_plan(
-                &env,
-                pass_id,
-                &buyer,
-                escrow.created_at,
-            );
+            Storage::remove_access_pass_rounding_plan(&env, pass_id, &buyer, escrow.created_at);
         } else {
             // Legacy escrows predate rounding plans and retain their saved payouts.
             if plan.fee_amount > 0 {
@@ -2402,56 +2377,6 @@ impl PromptHashTrait for PromptHashContract {
         Storage::extend_key_ttl(&env, &key);
         Ok(())
     }
-
-fn extend_listing(
-    env: Env,
-    creator: Address,
-    prompt_id: u128,
-    extension_days: u64,
-    fee_percentage_bps: Option<u32>,
-) -> Result<(), Error> {
-    creator.require_auth();
-    let mut prompt = Storage::require_prompt(&env, prompt_id)?;
-    ensure!(prompt.creator == creator, Error::Unauthorized)?;
-
-    ensure!(extension_days > 0, Error::InvalidExtensionDuration)?;
-
-    let extension_seconds = extension_days
-        .checked_mul(SECONDS_PER_DAY)
-        .ok_or(Error::ArithmeticOverflow)?;
-
-    let now = env.ledger().timestamp();
-    let new_expiry = if let Some(current_expiry) = prompt.expires_at {
-        if now >= current_expiry {
-            now.checked_add(extension_seconds).ok_or(Error::ArithmeticOverflow)?
-        } else {
-            current_expiry.checked_add(extension_seconds).ok_or(Error::ArithmeticOverflow)?
-        }
-    } else {
-        now.checked_add(extension_seconds).ok_or(Error::ArithmeticOverflow)?
-    };
-
-    let mut fee_paid = 0i128;
-    if let Some(fee_bps) = fee_percentage_bps {
-        ensure!(fee_bps <= MAX_BPS, Error::InvalidFeePercentage)?;
-        let fee = prompt
-            .price_stroops
-            .checked_mul(fee_bps as i128)
-            .ok_or(Error::ArithmeticOverflow)?
-            / MAX_BPS as i128;
-        if fee > 0 {
-            let fee_wallet = Storage::get_fee_wallet(&env).ok_or(Error::FeeWalletNotSet)?;
-            let xlm = Storage::get_stellar_asset_contract(&env)?;
-            let this_contract = env.current_contract_address();
-            xlm.transfer_from(&this_contract, &creator, &fee_wallet, &fee);
-            fee_paid = fee;
-        }
-    }
-
-    prompt.expires_at = Some(new_expiry);
-    Storage::update_prompt(&env, &prompt);
-    Events::emit_listing_extended(&env, prompt_id, creator, Some(new_expiry), extension_days, fee_paid);
-    Ok(())
 }
 #[contractimpl(contracttrait)]
 impl Ownable for PromptHashContract {}

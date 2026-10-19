@@ -16,51 +16,54 @@
 
 import mongoose from "mongoose";
 
+/**
+ * Notification types split into two delivery classes:
+ *
+ *  - Optional  (`prompt_update`, `purchase_receipt`) — suppressed when the
+ *    recipient has turned the type off in their notification preferences.
+ *  - Mandatory (`security_alert`, `account_lifecycle`, `entitlement_update`,
+ *    `support_access_notice`) — lifecycle/security alerts that must stay
+ *    deliverable regardless of preferences, and are audited on delivery.
+ *
+ * Keep `MANDATORY_NOTIFICATION_TYPES` in `notificationPreferences.ts` as the
+ * single source of truth for routing; this enum only bounds persisted values.
+ */
 export type NotificationType =
-  | "prompt_update" // creator updated a prompt the user owns
-  | "purchase_confirmed" // buyer: their purchase was indexed on-chain
-  | "dispute_opened" // buyer: they opened a dispute / creator: dispute filed against them
-  | "dispute_resolved" // buyer + creator: dispute resolution outcome
-  | "payout_available" // creator: payout ledger entry settled
-  | "moderation_action" // creator: a prompt was hidden/restored by a moderator
-  | "ownership_transfer" // both parties: prompt ownership change
-  | "system" // admin-targeted system announcements
-  | "access_granted" // buyer: access to a prompt has been granted
-  | "access_revoked" // buyer: access to a prompt has been revoked
-  | "recovery_event" // both parties: recovery action completed
-  | "role_change" // user: their role has been changed
-  | "permission_update"; // user: their permissions have been updated
+  | "prompt_update"
+  | "purchase_receipt"
+  | "security_alert"
+  | "account_lifecycle"
+  | "entitlement_update"
+  | "support_access_notice";
 
-const NOTIFICATION_TYPES: NotificationType[] = [
+export const NOTIFICATION_TYPES: NotificationType[] = [
   "prompt_update",
-  "purchase_confirmed",
-  "dispute_opened",
-  "dispute_resolved",
-  "payout_available",
-  "moderation_action",
-  "ownership_transfer",
-  "system",
-  "access_granted",
-  "access_revoked",
-  "recovery_event",
-  "role_change",
-  "permission_update",
+  "purchase_receipt",
+  "security_alert",
+  "account_lifecycle",
+  "entitlement_update",
+  "support_access_notice",
 ];
 
-// Default muted types per user are stored in preferences.mutedTypes.
-const DEFAULT_MUTED_TYPES: NotificationType[] = [];
+/**
+ * Delivery-class policy — the single source of truth for routing:
+ *  - Mandatory alerts ignore preferences and are always persisted + audited.
+ *  - Optional notifications are suppressed when the recipient opted out.
+ */
+export const MANDATORY_NOTIFICATION_TYPES: NotificationType[] = [
+  "security_alert",
+  "account_lifecycle",
+  "entitlement_update",
+  "support_access_notice",
+];
 
-const notificationPreferencesSchema = new mongoose.Schema(
-  {
-    mutedTypes: {
-      type: [String],
-      enum: NOTIFICATION_TYPES,
-      default: DEFAULT_MUTED_TYPES,
-    },
-    emailEnabled: { type: Boolean, default: false },
-  },
-  { _id: false },
+export const OPTIONAL_NOTIFICATION_TYPES: NotificationType[] = NOTIFICATION_TYPES.filter(
+  (type) => !MANDATORY_NOTIFICATION_TYPES.includes(type),
 );
+
+export function isMandatoryNotificationType(type: string): type is NotificationType {
+  return (MANDATORY_NOTIFICATION_TYPES as string[]).includes(type);
+}
 
 const notificationSchema = new mongoose.Schema(
   {
@@ -70,18 +73,22 @@ const notificationSchema = new mongoose.Schema(
       lowercase: true,
       index: true,
     },
-    // Stable idempotency key, typically the on-chain event id.
-    // Sparse so pre-existing rows without this field are unaffected.
-    idempotencyKey: {
+    // Prompt context is optional so lifecycle/security alerts that are not
+    // tied to a listing can use the same durable collection. Existing
+    // `prompt_update` writers still populate all three fields.
+    promptId: {
       type: String,
-      sparse: true,
+      default: "",
       index: true,
+    },
+    promptTitle: {
+      type: String,
+      default: "",
     },
     type: {
       type: String,
       required: true,
       enum: NOTIFICATION_TYPES,
-      index: true,
     },
     // Human-readable message. Must not contain sensitive payload data.
     message: {
@@ -106,41 +113,24 @@ const notificationSchema = new mongoose.Schema(
     // Type-specific supplemental fields (read-only, non-sensitive).
     versionIndex: {
       type: Number,
-      default: null,
+      default: 0,
     },
     changeNote: {
       type: String,
       default: "",
     },
-    sourceEventId: {
-      type: String,
-      required: true,
+    // True for security/lifecycle alerts that ignore preferences. Stored so
+    // incident review can distinguish mandatory deliveries from optional ones.
+    mandatory: {
+      type: Boolean,
+      default: false,
       index: true,
     },
+    // Stable identity of the underlying event (e.g. `support_access:<grantId>`).
+    // Unique when present so retries/duplicate projections deliver exactly once.
     dedupeKey: {
       type: String,
-      required: true,
-      unique: true,
-      index: true,
-    },
-    deliveryStatus: {
-      type: String,
-      enum: ["pending", "delivered", "failed"],
-      default: "delivered",
-      index: true,
-    },
-    attempts: {
-      type: Number,
-      default: 1,
-      min: 0,
-    },
-    lastError: {
-      type: String,
-      default: "",
-    },
-    deliveredAt: {
-      type: Date,
-      default: Date.now,
+      default: null,
     },
     read: {
       type: Boolean,
@@ -153,7 +143,10 @@ const notificationSchema = new mongoose.Schema(
 
 // Compound indexes for the notification center queries.
 notificationSchema.index({ recipientWallet: 1, read: 1, createdAt: -1 });
-notificationSchema.index({ sourceEventId: 1, recipientWallet: 1 });
+notificationSchema.index(
+  { dedupeKey: 1 },
+  { unique: true, partialFilterExpression: { dedupeKey: { $type: "string" } } },
+);
 
 export default Notification;
 export { NOTIFICATION_TYPES, notificationPreferencesSchema };

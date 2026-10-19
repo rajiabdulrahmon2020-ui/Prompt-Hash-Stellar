@@ -120,9 +120,21 @@ jobs:
           while IFS= read -r migration; do
             if [ -n "$migration" ]; then
               echo "Dry-running migration: $migration"
-              node ../scripts/migration-safety.mjs --dry-run --migration="$migration" || true
+              node ../scripts/migration-safety.mjs --dry-run --migration="$migration"
             fi
           done < /tmp/new_migrations.txt
+
+  # ── Release readiness self-test (migrations, smoke, rollback) ──────────
+  readiness-self-test:
+    name: Readiness Self-Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Run release readiness checks
+        run: node scripts/release-readiness.mjs --self-test
 
   # ── Contract upgrade preflight ──────────────────────────────────────────────
   contract-upgrade-preflight:
@@ -152,6 +164,7 @@ jobs:
       - checklist-present
       - migration-dry-run
       - contract-upgrade-preflight
+      - readiness-self-test
     if: always()
     steps:
       - name: Evaluate gate
@@ -167,11 +180,13 @@ jobs:
           CHECKLIST="${{ needs.checklist-present.result }}"
           MIGRATION="${{ needs.migration-dry-run.result }}"
           CONTRACT="${{ needs.contract-upgrade-preflight.result }}"
+          READINESS="${{ needs.readiness-self-test.result }}"
 
           FAILED=0
           [ "$CHECKLIST" == "failure" ] && echo "❌ Checklist check failed." && FAILED=1
           [ "$MIGRATION" == "failure" ] && echo "❌ Migration dry-run failed." && FAILED=1
           [ "$CONTRACT" == "failure" ] && echo "❌ Contract upgrade preflight failed." && FAILED=1
+          [ "$READINESS" == "failure" ] && echo "❌ Readiness self-test failed." && FAILED=1
 
           # skipped means condition was false (not applicable), treat as pass
           if [ "$FAILED" -eq 0 ]; then

@@ -54,7 +54,7 @@ export interface MaintenanceBannerDocument extends mongoose.Document {
 
 export type MaintenanceBannerModel = Model<MaintenanceBannerDocument>;
 
-const maintenanceBannerSchema = new SchemaMaintenanceBannerDocument>(
+const maintenanceBannerSchema = new Schema<MaintenanceBannerDocument>(
   {
     title: { type: String, required: true, trim: true, maxlength: 200 },
     message: { type: String, required: true, trim: true, maxlength: 2000 },

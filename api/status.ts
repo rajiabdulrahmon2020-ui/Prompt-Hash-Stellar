@@ -8,14 +8,19 @@ import {
   type HealthProbeConfig,
 } from "../server/src/services/healthProbes";
 import {
-  getActiveMaintenanceBanners,
-  type MaintenanceBanner,
-} from "../server/src/services/maintenanceBanners";
+  maintenanceBannerService,
+  type MaintenanceBannerPublic,
+} from "../server/src/services/maintenanceBannerService";
+import { derivePublicStatus } from "../server/src/services/publicStatus";
+import { readContract } from "../src/lib/stellar/tx";
 
 const STELLAR_RPC_URL =
   process.env.PUBLIC_STELLAR_RPC_URL ?? "https://soroban-testnet.stellar.org";
 const HORIZON_URL =
   process.env.PUBLIC_STELLAR_HORIZON_URL ?? "https://horizon-testnet.stellar.org";
+const NETWORK_PASSPHRASE =
+  process.env.PUBLIC_STELLAR_NETWORK_PASSPHRASE || "Test SDF Network ; September 2015";
+const PAUSE_READ_TIMEOUT_MS = 8000;
 
 type ServiceStatus = "up" | "down" | "degraded";
 
@@ -106,6 +111,39 @@ async function pingUnlockService(): Promise<ServiceCheck> {
   }
 }
 
+/**
+ * Read the contract's `is_paused` view through a free `simulateTransaction`
+ * call (#986). Returns `null` when the contract or simulation account is not
+ * configured, or the read fails or times out, so an unknown flag is never
+ * reported as paused.
+ */
+async function readContractPaused(): Promise<boolean | null> {
+  const contractId = process.env.PUBLIC_PROMPT_HASH_CONTRACT_ID;
+  const simulationAccount = process.env.PUBLIC_STELLAR_SIMULATION_ACCOUNT;
+  if (!contractId || !simulationAccount) return null;
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("is_paused read timeout")), PAUSE_READ_TIMEOUT_MS);
+    });
+    const paused = await Promise.race([
+      readContract<unknown>(
+        { rpcUrl: STELLAR_RPC_URL, networkPassphrase: NETWORK_PASSPHRASE, simulationAccount },
+        contractId,
+        "is_paused",
+      ),
+      timeout,
+    ]);
+    return typeof paused === "boolean" ? paused : null;
+  } catch (err) {
+    console.error("Failed to read contract pause status:", err);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function handler(req: any, res: any) {
   if (req.method !== "GET") {
     res.status(405).json({ error: "Method not allowed." });
@@ -120,11 +158,12 @@ async function handler(req: any, res: any) {
     const lastIndexedLedger = indexerState?.lastIndexedLedger || 0;
 
     // Run synthetic health probes in parallel with basic service checks
-    const [rpc, horizon, unlock, probeResults] = await Promise.all([
+    const [rpc, horizon, unlock, probeResults, contractPaused] = await Promise.all([
       pingRpc(),
       pingService("Horizon", HORIZON_URL),
       pingUnlockService(),
       runHealthProbes(lastIndexedLedger),
+      readContractPaused(),
     ]);
 
     const services: ServiceCheck[] = [rpc, horizon, unlock];
@@ -137,28 +176,26 @@ async function handler(req: any, res: any) {
       error: probe.error,
     }));
 
-    const allServices = [...services, ...probeServices];
-    
-    const overallStatus: ServiceStatus = allServices.every((s) => s.status === "up")
-      ? "up"
-      : allServices.some((s) => s.status === "up")
-        ? "degraded"
-        : "down";
-
-    let maintenance: MaintenanceBanner[] = [];
+    let maintenance: MaintenanceBannerPublic[] = [];
     try {
-      maintenance = await getActiveMaintenanceBanners();
+      maintenance = await maintenanceBannerService.listActive();
     } catch (err) {
       console.error("Failed to load maintenance banners:", err);
     }
 
+    // Only the sanitized projection is published: raw error text and probe
+    // details stay in the server logs (#986).
+    const publicStatus = derivePublicStatus({
+      components: [...services, ...probeServices],
+      probes: probeResults,
+      maintenance,
+      contractPaused,
+    });
+
     res.status(200).json({
-      status: overallStatus,
+      ...publicStatus,
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
-      services: allServices,
-      probes: probeResults, // Include detailed probe data
-      maintenance,
       indexer: {
         lastIndexedLedger,
         status: indexerState?.leaseHolder ? "active" : "idle",
@@ -181,7 +218,7 @@ async function runHealthProbes(lastIndexedLedger: number): Promise<ProbeResult[]
   try {
     const config: HealthProbeConfig = {
       rpcUrl: process.env.PUBLIC_STELLAR_RPC_URL || STELLAR_RPC_URL,
-      networkPassphrase: process.env.PUBLIC_STELLAR_NETWORK_PASSPHRASE || "Test SDF Network ; September 2015",
+      networkPassphrase: NETWORK_PASSPHRASE,
       promptHashContractId: process.env.PUBLIC_PROMPT_HASH_CONTRACT_ID || "",
       simulationAccount: process.env.PUBLIC_STELLAR_SIMULATION_ACCOUNT || "",
       horizonUrl: HORIZON_URL,

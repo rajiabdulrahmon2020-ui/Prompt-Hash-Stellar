@@ -5297,7 +5297,14 @@ fn test_refunded_escrow_does_not_accrue_rounding_carry() {
     let xlm_client = token::StellarAssetClient::new(&env, &context.xlm);
     let creator = Address::generate(&env);
     let buyer = Address::generate(&env);
-    let prompt_id = create_prompt(&env, &client, &creator, "Refunded fraction", 1, &context.xlm);
+    let prompt_id = create_prompt(
+        &env,
+        &client,
+        &creator,
+        "Refunded fraction",
+        1,
+        &context.xlm,
+    );
 
     fund_buyer(&xlm_client, &buyer, &context.contract, 1);
     client.buy_prompt(&buyer, &prompt_id, &None::<Address>, &1, &None::<Bytes>);

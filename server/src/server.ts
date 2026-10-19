@@ -21,6 +21,9 @@ import { supportCaseRouter } from "./routes/supportCaseRoutes.js";
 import { qualityCheckRouter } from "./routes/qualityCheckRoutes.js";
 import { recommendationFeedbackRouter } from "./routes/recommendationFeedbackRoutes.js";
 import { operationalHealthRouter } from "./routes/operationalHealthRoutes.js";
+import { staleCacheRouter } from "./routes/staleCacheRoutes.js";
+import { trendAnalyticsRouter } from "./routes/trendAnalyticsRoutes.js";
+import { dependencyHealthRouter } from "./routes/dependencyHealthRoutes.js";
 import { drRouter } from "./routes/drRoutes.js";
 import { exportRouter } from "./routes/exportRoutes";
 import { policyLimitRouter } from "./routes/policyLimitRoutes";
@@ -28,6 +31,14 @@ import { operationRecoveryRouter } from "./routes/operationRecoveryRoutes";
 import { receiptRouter } from "./routes/receiptRoutes";
 import { maintenanceBannerRouter } from "./routes/maintenanceBannerRoutes";
 import { externalIdentityRouter } from "./routes/externalIdentityRoutes";
+import { abuseRiskRouter } from "./routes/abuseRiskRoutes";
+import { retentionHoldRouter } from "./routes/retentionHoldRoutes";
+import { lifecycleCaptureRouter, lifecycleReportRouter } from "./routes/lifecycleAnalyticsRoutes";
+import { adminRateLimitRouter } from "./routes/adminRateLimitRoutes";
+import { supportAccessRouter } from "./routes/supportAccessRoutes";
+import { payoutLedgerRouter } from "./routes/payoutLedgerRoutes";
+import { entitlementRouter } from "./routes/entitlementRoutes";
+import { bundleRouter } from "./routes/bundleRoutes";
 import {
   GetOpenApiSchema,
   GetOpenApiExplorer,
@@ -76,6 +87,9 @@ app.use("/api/support-cases", supportCaseRouter);
 app.use("/api/quality-checks", qualityCheckRouter);
 app.use("/api/recommendations/feedback", recommendationFeedbackRouter);
 app.use("/api/admin/operational-health", operationalHealthRouter);
+app.use("/api/stale-cache", staleCacheRouter);
+app.use("/api/admin/trend-analytics", trendAnalyticsRouter);
+app.use("/api/admin/dependency-health", dependencyHealthRouter);
 app.use("/api/maintenance", maintenanceBannerRouter); // Maintenance mode banners
 // Export routes for user-owned data (requires authentication)
 // Machine-readable API schema + interactive explorer (#713).
@@ -85,6 +99,10 @@ app.use("/api/admin/dr", drRouter);
 app.use("/api/admin/policy-limits", policyLimitRouter);
 app.use("/api/recovery", operationRecoveryRouter);
 app.use("/api/receipts", receiptRouter);
+app.use("/api/admin/abuse-risk", abuseRiskRouter);
+app.use("/api/admin/retention-holds", retentionHoldRouter);
+app.use("/api/analytics/lifecycle", lifecycleCaptureRouter);
+app.use("/api/admin/lifecycle-analytics", lifecycleReportRouter);
 
 // Apply correlation ID middleware to all routes
 app.use(correlationMiddleware);

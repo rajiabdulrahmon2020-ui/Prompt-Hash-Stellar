@@ -62,18 +62,49 @@ export const AUDIT_ACTIONS = [
   "moderation.override",
   "identity_link",
   "identity_unlink",
+  // risk-scored abuse detection
+  "abuse_risk_decision",
+  "abuse_risk_review_resolved",
+  "abuse_risk_subject_reset",
+  // retention holds
+  "retention_hold_created",
+  "retention_hold_released",
+  "retention_hold_reconciled",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
 export type AuditResult = "success" | "failure" | "blocked";
 
+/**
+ * Actions the schema historically accepted on top of `AUDIT_ACTIONS`. They are
+ * kept so existing rows and call sites (support access, notification prefs)
+ * never lose persistence, while `AUDIT_ACTIONS` stays the single typed
+ * contract. The schema enum below is the union of both — deriving it from
+ * `AUDIT_ACTIONS` is what guarantees a newly declared action can actually be
+ * persisted instead of being silently dropped by Mongoose validation
+ * (regression fixed for `abuse_risk_*` in #1046).
+ */
+const LEGACY_SCHEMA_ACTIONS = [
+  "notification_preference_updated",
+  "notification_mandatory_delivered",
+  "support_access_granted",
+  "support_access_revoked",
+  "support_access_used",
+  "support_access_denied",
+] as const;
+
+export const AUDIT_SCHEMA_ACTIONS: readonly string[] = [
+  ...AUDIT_ACTIONS,
+  ...LEGACY_SCHEMA_ACTIONS,
+];
+
 const auditLogSchema = new mongoose.Schema(
   {
     action: {
       type: String,
       required: true,
-      enum: AUDIT_ACTIONS,
+      enum: AUDIT_SCHEMA_ACTIONS,
       index: true,
     },
     result: {

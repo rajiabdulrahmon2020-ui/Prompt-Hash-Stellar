@@ -14,6 +14,21 @@ export const ErrorCode = {
   /** The HTTP method is not allowed on this endpoint. */
   METHOD_NOT_ALLOWED: "METHOD_NOT_ALLOWED",
 
+  /** A request field is present but has an invalid value (webhooks, profile actions). */
+  INVALID_INPUT: "INVALID_INPUT",
+
+  /** The request body or payload failed schema validation. */
+  VALIDATION_ERROR: "VALIDATION_ERROR",
+
+  /** The request timestamp is outside the accepted window (replay protection). */
+  STALE_REQUEST: "STALE_REQUEST",
+
+  /** No record matches the given identifier. */
+  NOT_FOUND: "NOT_FOUND",
+
+  /** The operation is understood but not permitted for this record right now. */
+  OPERATION_NOT_ALLOWED: "OPERATION_NOT_ALLOWED",
+
   // ── Auth / access errors (4xx) ────────────────────────────────────────────
 
   /** The challenge token has expired. The client should request a new one. */
@@ -64,6 +79,12 @@ export const ErrorCode = {
 
   /** The idempotency key was reused with conflicting request data. */
   IDEMPOTENCY_CONFLICT: "IDEMPOTENCY_CONFLICT",
+
+  /** The event was already processed (inbound webhook de-duplication). */
+  DUPLICATE_EVENT: "DUPLICATE_EVENT",
+
+  /** An unexpected server failure (never expose details). */
+  INTERNAL_ERROR: "INTERNAL_ERROR",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -102,6 +123,11 @@ export function apiError(
  */
 export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   MISSING_FIELDS: "Some required fields are missing. Please check your request.",
+  INVALID_INPUT: "Some of the information provided is not valid. Please check it and try again.",
+  VALIDATION_ERROR: "The request could not be validated. Please check it and try again.",
+  STALE_REQUEST: "This request is too old. Please try again.",
+  NOT_FOUND: "The requested item could not be found.",
+  OPERATION_NOT_ALLOWED: "This operation is not allowed right now.",
   METHOD_NOT_ALLOWED: "This action is not supported.",
   CHALLENGE_EXPIRED: "Your session has expired. Click Decrypt Content to try again.",
   CHALLENGE_INVALID: "The unlock session is no longer valid. Click Decrypt Content to start over.",
@@ -119,6 +145,8 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   TEMPORARY_FAILURE: "A temporary error occurred. Please try again in a moment.",
 
   IDEMPOTENCY_CONFLICT: "This idempotency key was used with a different request. Please use a new key.",
+  DUPLICATE_EVENT: "This event has already been processed.",
+  INTERNAL_ERROR: "Something went wrong on our end. Please try again later.",
 };
 
 export type UnlockErrorCategory = "wallet" | "access" | "server";

@@ -13,6 +13,7 @@
 import { createHash, randomBytes, randomUUID } from "crypto";
 import WebhookSubscription from "../models/WebhookSubscription";
 import WebhookOutboxEvent, { WebhookOutboxStatus } from "../models/WebhookOutboxEvent";
+import { redactSensitiveFields } from "./sensitiveContent";
 
 const SECRET_ROTATION_GRACE_MS = 24 * 60 * 60 * 1000; // 24h for a subscriber to switch over.
 
@@ -52,6 +53,13 @@ export async function enqueue(
 ): Promise<void> {
   if (!walletAddress || !dedupeKey) return;
 
+  // Sensitive-content boundary: redact deny-listed fields (secrets, keys,
+  // plaintext/ciphertext, prompt content) before the payload is hashed or
+  // persisted, so neither the outbox row nor the delivered body can leak
+  // private marketplace data. The hash is computed over the redacted payload
+  // so subscribers can still verify hash(body) == header.
+  const safeData = redactSensitiveFields(data);
+
   const subscriptions = await WebhookSubscription.find({
     walletAddress: walletAddress.toLowerCase(),
     active: true,
@@ -80,10 +88,10 @@ export async function enqueue(
           eventId: dedupeKey,
           deliveryId: randomUUID(),
           sequence,
-          payloadHash: payloadHash(data),
+          payloadHash: payloadHash(safeData),
           schemaVersion: 1,
           event,
-          payload: data,
+          payload: safeData,
         });
       } catch (err: unknown) {
         if ((err as { code?: number }).code === 11000) {

@@ -65,7 +65,7 @@ yarn dev
 
 | Variable | Required | Notes |
 |----------|----------|-------|
-| `PUBLIC_STELLAR_NETWORK` | Yes | `TESTNET`, `MAINNET`, or `LOCAL` |
+| `PUBLIC_STELLAR_NETWORK` | Yes | `TESTNET`, `PUBLIC` (mainnet), `FUTURENET`, or `LOCAL` — `MAINNET` is rejected by the frontend |
 | `PUBLIC_STELLAR_NETWORK_PASSPHRASE` | Yes | Must match RPC network |
 | `PUBLIC_STELLAR_RPC_URL` | Yes | Soroban RPC endpoint |
 | `PUBLIC_STELLAR_HORIZON_URL` | Yes | Horizon endpoint |
@@ -118,7 +118,7 @@ Returns:
 ```json
 {
   "ready": true,
-  "network": "MAINNET",
+  "network": "PUBLIC",
   "manifestHash": "a1b2c3d4e5f67890",
   "promptHashContractId": "CB...",
   "nativeAssetContractId": "CD...",
@@ -139,6 +139,8 @@ yarn build                # runs check:policy and check:setup via prebuild
 ```
 
 CI runs `yarn check:setup` on pull requests (see `.github/workflows/frontend.yml`).
+
+Cross-environment consistency (network ↔ passphrase ↔ endpoints ↔ contract IDs ↔ secrets) is enforced by `src/test/configContract.test.ts`; see [config-contract.md](operations/config-contract.md). For a live check of your own setup run `yarn diagnose`.
 
 ---
 

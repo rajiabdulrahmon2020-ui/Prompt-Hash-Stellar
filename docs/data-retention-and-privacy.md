@@ -29,6 +29,15 @@ This document outlines how PromptHash stores, retains, and secures off-chain mar
 
 ## Retention Expectations
 
+Operational metadata is classified before it is stored. The allow-list in
+`server/src/services/operationalMetadata.ts` permits request/job/resource
+identifiers, operation status, bounded attempt and duration values, and stable
+error codes. Prompt text, raw requests, wallet addresses, credentials, nested
+objects, and payment details are unnecessary operational fields and are
+dropped at the write boundary. Public marketplace content and financial or
+on-chain records are separate data classes and are not copied into operational
+events.
+
 - **Challenges & Nonces**: Stored temporarily in memory/Redis and expire after 5 minutes. Never persisted to long-term storage.
 - **Fulfillment & Unlock Records**: Retained indefinitely to allow buyers to re-download purchased materials, unless an explicit deletion request is made.
 - **Payout Statements**: Generated on demand from purchase and refund events. They are recomputed, not stored, and may be regenerated for any period within the purchase history retention window (creators: see the [creator publishing guide](./creator-publishing-guide.md)).
@@ -70,9 +79,13 @@ been applied: it removes the processed-webhook TTL index, which otherwise
 bypasses holds and hard-deletes records. Apply migrations with
 `cd server && npm run db:migrate`.
 
-Before a dispute, legal request, or audit requires preservation, set
-`retentionHold: true` and record the reason in `retentionHoldReason` on the
-affected `InboundWebhookEvent`, `QuarantinedEvent`, `JobRecord`, or `Report`.
+Before a dispute, legal request, or audit requires preservation, place a
+retention hold through `POST /api/admin/retention-holds` (see
+[retention-holds.md](./retention-holds.md)); it links the affected records to
+the case, audits the change, and releases them only when the last covering
+hold is released. Setting `retentionHold: true` and `retentionHoldReason`
+directly on an `InboundWebhookEvent`, `QuarantinedEvent`, `JobRecord`, or
+`Report` is still honoured for manual use.
 Release the hold only after the responsible reviewer documents that it is no
 longer needed. The cleanup query rechecks the hold and eligibility conditions
 at archive time to avoid racing with a newly applied hold.
@@ -80,6 +93,22 @@ at archive time to avoid racing with a newly applied hold.
 The cleanup job never targets `AuditLog`, `LedgerEntry`, `Purchase`,
 `PayoutStatement`, or `ProcessedEvent` records. Do not add TTL indexes or
 automatic deletion for these collections without an approved retention policy.
+
+### Edge cases and recovery
+
+- A `retentionHold` is rechecked in the update filter, so a hold added while a
+  batch is running wins over cleanup. Failed batches are retried by the worker;
+  records remain unarchived until a later successful run.
+- Cleanup is idempotent: archived records are skipped, and scrubbing removes
+  sensitive fields without changing identifiers needed for idempotency.
+- If a rollout produces unexpected counts, stop enqueueing new jobs, run the
+  dry-run command, and inspect the per-category result. Roll back the worker
+  deployment, preserve affected records with a retention hold, and restore the
+  last backup only when live records were incorrectly changed. Re-run the
+  migration and cleanup after verifying the policy and indexes.
+- Live scrubbing does not erase older backup copies. Backup retention and any
+  legal hold must be handled with the backup provider before declaring deletion
+  complete.
 
 ## Deletion, Backup, and Redaction Behaviour
 

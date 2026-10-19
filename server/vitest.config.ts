@@ -1,8 +1,5 @@
 import { defineConfig } from "vitest/config";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { fileURLToPath } from "node:url";
 
 export default defineConfig({
   // Vite's default PostCSS config search climbs to the repo root and picks
@@ -14,8 +11,14 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@prompthash/schema": path.resolve(__dirname, "../packages/schema/src/index.ts"),
-      "@": path.resolve(__dirname, "../src"),
+      // Resolve the shared schema package from source. Its published entry
+      // points at ./dist, which is only produced by `npm run build` inside
+      // packages/schema and is not built by CI before tests run.
+      "@prompthash/schema": fileURLToPath(
+        new URL("../packages/schema/src/index.ts", import.meta.url),
+      ),
+      // A few server modules consume frontend helpers through the `@/` alias.
+      "@": fileURLToPath(new URL("../src", import.meta.url)),
     },
   },
   test: {

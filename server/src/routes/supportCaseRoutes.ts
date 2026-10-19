@@ -1,8 +1,65 @@
 import express from "express";
 import { supportCaseService } from "../services/supportCaseService.js";
-import { requireAdminScope } from "../middleware/adminAuth.js";
+import { AdminRequest, requireAdminScope } from "../middleware/adminAuth.js";
+import { markPrivate } from "../middleware/etag.js";
+import { AUDIT_EXPORT_MAX_LIMIT } from "../services/auditTrail.js";
+import {
+  EvidenceAnchorError,
+  exportSupportEvidenceBundle,
+  verifySupportEvidenceBundle,
+} from "../services/supportEvidenceBundle.js";
 
 export const supportCaseRouter = express.Router();
+
+// Privacy-preserving evidence bundle for a case (#967). See
+// docs/support-evidence-bundles.md for the format and verification.
+supportCaseRouter.get(
+  "/:caseId/evidence-bundle",
+  requireAdminScope("support:read"),
+  async (req: AdminRequest, res) => {
+    markPrivate(res);
+    try {
+      const bundle = await exportSupportEvidenceBundle(String(req.params.caseId), {
+        actor: req.admin?.sub ?? null,
+        requestId: req.correlationId ?? null,
+      });
+      if (!bundle) {
+        return res.status(404).json({ error: "Case not found" });
+      }
+      res.json(bundle);
+    } catch (err) {
+      if (err instanceof EvidenceAnchorError) {
+        return res.status(503).json({ error: err.message });
+      }
+      res.status(500).json({ error: "Failed to build evidence bundle" });
+    }
+  }
+);
+
+supportCaseRouter.post(
+  "/evidence-bundle/verify",
+  requireAdminScope("support:read"),
+  async (req, res) => {
+    const bundle = req.body ?? {};
+    if (
+      typeof bundle.manifestChecksum !== "string" ||
+      typeof bundle.case?.caseId !== "string" ||
+      !Array.isArray(bundle.audit?.records)
+    ) {
+      return res.status(400).json({ error: "An exported evidence bundle is required." });
+    }
+    if (bundle.audit.records.length > AUDIT_EXPORT_MAX_LIMIT) {
+      return res
+        .status(413)
+        .json({ error: `A bundle may contain at most ${AUDIT_EXPORT_MAX_LIMIT} audit records.` });
+    }
+    try {
+      res.json(await verifySupportEvidenceBundle(bundle));
+    } catch {
+      res.status(500).json({ error: "Failed to verify evidence bundle" });
+    }
+  }
+);
 
 // Create support case
 supportCaseRouter.post(

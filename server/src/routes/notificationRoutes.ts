@@ -20,7 +20,18 @@ import {
 
 export const notificationRouter = express.Router();
 
-// List notifications (paginated; supports ?unread=true and ?type=<type>)
+// Preference routes are registered before the generic wallet routes for
+// clarity; Express only matches `/:walletAddress` for a single path segment,
+// so `/x/preferences` never falls through to the notifications list.
+notificationRouter.get(
+  "/:walletAddress/preferences",
+  GetNotificationPreferences,
+);
+notificationRouter.put(
+  "/:walletAddress/preferences",
+  UpdateNotificationPreferences,
+);
+
 notificationRouter.get("/:walletAddress", GetNotifications);
 
 // Unread badge count

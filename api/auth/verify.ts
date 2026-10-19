@@ -8,7 +8,8 @@ import { withObservability } from "../../src/lib/observability/wrapper";
 import { checkReplayProtection } from "../../src/lib/observability/replayProtection";
 import { metrics } from "../../src/lib/observability/metrics";
 import { recordAuditEvent } from "../../server/src/services/auditTrail";
-import { apiError, ErrorCode } from "../../src/lib/api/errorCodes";
+import { ErrorCode } from "../../src/lib/api/errorCodes";
+import { sendApiError } from "../../src/lib/api/problemDetails";
 import { isPlaceholder } from "../../src/lib/validation/envValidator";
 
 export interface WalletVerifyRequest {
@@ -26,14 +27,14 @@ export interface WalletVerifyResponse {
 
 async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== "POST") {
-    res.status(405).json(apiError(ErrorCode.METHOD_NOT_ALLOWED, "Method not allowed."));
+    sendApiError(req, res, ErrorCode.METHOD_NOT_ALLOWED, "Method not allowed.", { status: 405 });
     return;
   }
 
   const secret = process.env.CHALLENGE_TOKEN_SECRET;
   if (!secret || isPlaceholder(secret) || secret.length < 16) {
     req.logger.error("CHALLENGE_TOKEN_SECRET is not configured correctly.");
-    res.status(500).json(apiError(ErrorCode.CONFIGURATION_ERROR, "Configuration error."));
+    sendApiError(req, res, ErrorCode.CONFIGURATION_ERROR, "Configuration error.", { status: 500 });
     return;
   }
 
@@ -44,11 +45,12 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
     req.body ?? {};
 
   if (!address || !token || !signedMessage || !promptId) {
-    res.status(400).json(
-      apiError(
-        ErrorCode.MISSING_FIELDS,
-        "address, token, signedMessage, and promptId are required.",
-      ),
+    sendApiError(
+      req,
+      res,
+      ErrorCode.MISSING_FIELDS,
+      "address, token, signedMessage, and promptId are required.",
+      { status: 400 },
     );
     return;
   }
@@ -78,7 +80,7 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         clientIp,
         reason: "invalid_signature",
       });
-      res.status(401).json(apiError(ErrorCode.INVALID_SIGNATURE, "Invalid wallet signature."));
+      sendApiError(req, res, ErrorCode.INVALID_SIGNATURE, "Invalid wallet signature.", { status: 401 });
       return;
     }
 
@@ -93,8 +95,12 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
         clientIp,
         reason: "replay_attack",
       });
-      res.status(400).json(
-        apiError(ErrorCode.TEMPORARY_FAILURE, "This sign-in request has already been processed."),
+      sendApiError(
+        req,
+        res,
+        ErrorCode.TEMPORARY_FAILURE,
+        "This sign-in request has already been processed.",
+        { status: 400 },
       );
       return;
     }
@@ -128,13 +134,14 @@ async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
       reason: isExpired ? "expired_challenge" : "error",
     });
 
-    res.status(400).json(
-      apiError(
-        isExpired ? ErrorCode.CHALLENGE_EXPIRED : ErrorCode.CHALLENGE_INVALID,
-        isExpired
-          ? "The wallet sign-in challenge has expired. Please try again."
-          : "Wallet authentication failed.",
-      ),
+    sendApiError(
+      req,
+      res,
+      isExpired ? ErrorCode.CHALLENGE_EXPIRED : ErrorCode.CHALLENGE_INVALID,
+      isExpired
+        ? "The wallet sign-in challenge has expired. Please try again."
+        : "Wallet authentication failed.",
+      { status: 400 },
     );
   }
 }

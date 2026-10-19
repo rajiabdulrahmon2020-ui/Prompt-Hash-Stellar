@@ -101,7 +101,7 @@ export function computeRecordHash(record: AuditHashInput): string {
   return createHash("sha256").update(data).digest("hex");
 }
 
-function hashInputFromRow(row: any): AuditHashInput {
+export function hashInputFromRow(row: any): AuditHashInput {
   return {
     action: row.action,
     result: row.result,
